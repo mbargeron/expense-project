@@ -1,0 +1,112 @@
+ExpenseController
+=================
+- Implemented the standard Model-Controller pattern for REST services.  Could break out controller files if they became
+  more verbose.
+
+- REST APIs are secured with demo:demo as prescribed.  Failing to pass authentication headers results in:
+
+    {
+        "timestamp": 1457324161333,
+        "status": 401,
+        "error": "Unauthorized",
+        "message": "Full authentication is required to access this resource",
+        "path": "/expenses"
+    }
+
+- Invoked @Autowired and used annotations wherever possible/necessary to eliminate clutter and to decouple objects
+  via dependency injection
+
+- Invoked @Bean MappedInterceptor for LogInterceptor to log every incoming request via the HttpServletRequest object for
+  dev, test and production troubleshooting
+
+- Implemented RestController methods in CRUD order for easier location
+
+- Implemented a 'logResponse' private method in the ExpenseController to provide easier logging of every response for
+  troubleshooting. Could have logged the response in the LogInterceptor, but it's more messy and limits potential output
+  values for errors, etc.
+
+- Implemented a 'handleException' method in the ExpenseController to gracefully handle any messages required as a result
+  of an exception being thrown.
+
+*** IMPROVEMENT ***
+The error handling is not very verbose or complete.  It does the job for a quick project, but could be greatly improved.
+
+
+- Directly populated 'Expense' dto object from 'create' service call using @Valid for cleaner validation of incoming
+  parameters
+
+- 'retrieveList' parameters are received in a Map<String, String> object for easier access.  This enables
+  the user to submit a variable number of parameters and allows the the underlying functions to check input parameters
+  against actual Expense DTO properties before attempting to filter based on the input.  All unknown parameters
+  are just ignored, though an ExpenseException could be thrown if the requirements dictated such.
+
+*** IMPROVEMENT ***
+Rather than being strictly an "equal to" search, the 'retrieveList' method could have operators added to search for
+dates greater than or less than the input date.
+
+
+
+ExpenseResponse DTO
+===================
+- Parent class to Expense DTO for consistently typed responses to REST calls, whether an error has occurred or not.
+
+- Specifies @JsonSerialize(include=JsonSerialize.Inclusion.NON_EMPTY) to prevent serialization of empty variables
+
+- Contains a single 'error' property that can be set, but will not serialize if it isn't populated
+
+
+
+Expense DTO
+===========
+- Used the Mongo auto-assign ID for the Expense 'id' field.  No setter available to set it programmatically.
+  Enforces immutability.
+
+- Created a ValidationMessages.properties resource for more user-friendly custom error messages.
+
+- The following validations apply:
+
+    - 'id' field is annotated with @Id for Mongo
+
+    - 'merchant' cannot be empty
+
+    - Set 'amount' will throw an error if the amount is less than zero.  Some times you want to track $0 transactions
+      even if no money has changed hands, so I made zero a valid amount
+
+    - 'date' is parsed from isoDateFormat = "yyyy-MM-dd'T'HH:mm:ssX".  If it passes parsing, it will be stored as a
+      Java Date property in the Expense DTO, then sent to MongoDB and stored as a Date (timestamp).  When it's read from
+      MongoDB, it gets written out in isoDateFormat, but with the timezone set to the MongoDB timezone. This could be
+      modified to always return UTC, no matter what timezone the DB is set to, but it is inconsequential for the purposes
+      of this demo.
+
+*** IMPROVEMENT ***
+SimpleDateFormat is non-re-entrant (not thread safe), so it could cause production issues if hundreds of
+transactions were hitting the server simultaneously.
+
+
+    - The Expense 'status' String property is populated using the 'Status' interface defined with values to populate.
+      This could have been done with an enum object, but in my experience, the translation to and from String is messier
+      than it needs to be for a simple operation.
+
+    - 'status' is initially set to 'new', but can be changed to 'reimbursed' if still in the 'new' status.  'delete'
+      status is never actually stored anywhere, but is assigned to the response object before returning from a 'delete'
+      action in the ExpenseController.
+
+    - Since 'comments' is an add-to only group of comments, I implemented it as ArrayList<String>.  This transforms
+      nicely when serialized to JSON and makes it very readable to the end user.
+
+
+ExpenseRepository & Related Classes
+===================================
+- ExpenseRepository extends MongoRepository<Expense, String>, ExpenseRepositoryCustom in the normal Repository manner
+
+- It's used to specify standard MongoDB methods as pertaining to the Expense DTO storage and retrieval
+
+- ExpenseRepositoryCustom defines the interfaces for custom database storage and retrieval methods
+
+- ExpenseRepositoryImpl implements the interfaces in defined by ExpenseRepositoryCustom
+
+- Together, these three classes are used by the ExpenseController via @Autowired private ExpenseRepository repository;
+
+- Other than that, these classes are fairly black-box and I'm not certain of all the details since I haven't worked much
+  MongoDB as of yet.  It all seems pretty straight-forward once you learn the query language.
+
